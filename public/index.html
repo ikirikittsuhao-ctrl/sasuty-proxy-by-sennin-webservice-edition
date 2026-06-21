@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>sasuty proxy v1</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        :root {
+            --bg-body: #f8f9fa;
+            --chrome-header: #dee1e6;
+            --chrome-tab-bg: #eceef0;
+            --chrome-tab-active: #ffffff;
+            --chrome-border: #dadce0;
+            --elixir-primary: #4285f4;
+            --text-main: #202124;
+            --text-dim: #5f6368;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            width: 100%;
+        }
+
+        /* --- Boot Animation (Pulse) --- */
+        #boot-loader {
+            position: fixed; inset: 0; background: #ffffff; z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: opacity 0.5s;
+        }
+        .pulse-ring {
+            width: 80px; height: 80px; border: 2px solid var(--elixir-primary);
+            border-radius: 50%; position: absolute; animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
+        .boot-icon { z-index: 1; font-size: 2rem; color: var(--elixir-primary); }
+        .boot-progress-container { width: 200px; height: 2px; background: #eee; margin-top: 60px; }
+        .boot-progress-bar { width: 0%; height: 100%; background: #4285f4; transition: width 0.3s; }
+
+        /* --- Browser Layout --- */
+        .app-container { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* 固定ヘッダー領域 */
+        .browser-header { 
+            background: var(--chrome-header); 
+            padding: 6px 6px 0 6px; 
+            display: flex; 
+            align-items: flex-end; 
+            flex-shrink: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .tab-bar { display: flex; align-items: center; gap: 2px; flex: 1; overflow: hidden; }
+
+        .tab {
+            min-width: 150px; max-width: 200px; height: 32px; background: var(--chrome-tab-bg);
+            border-radius: 8px 8px 0 0; display: flex; align-items: center; padding: 0 12px;
+            cursor: grab; font-size: 0.8rem; color: var(--text-dim); transition: 0.2s;
+            animation: tabFadeIn 0.2s ease-out;
+        }
+        @keyframes tabFadeIn {
+            from { width: 0; min-width: 0; opacity: 0; transform: translateY(4px); }
+            to { min-width: 150px; opacity: 1; transform: translateY(0); }
+        }
+        .tab.active { background: var(--chrome-tab-active); color: var(--text-main); font-weight: 500; }
+        .tab-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 8px; }
+        .tab-close { opacity: 0; transition: 0.2s; cursor: pointer; }
+        .tab:hover .tab-close, .tab.active .tab-close { opacity: 0.6; }
+
+        .new-tab-btn { background: none; border: none; padding: 8px; cursor: pointer; color: var(--text-dim); }
+
+        /* 固定ナビゲーションバー領域 */
+        .nav-bar { 
+            padding: 8px 16px; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            background: var(--chrome-tab-active); 
+            border-bottom: 1px solid var(--chrome-border); 
+            flex-shrink: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .nav-controls { display: flex; gap: 4px; }
+        .nav-btn { background: none; border: none; color: var(--text-dim); width: 30px; height: 30px; cursor: pointer; border-radius: 50%; }
+        .nav-btn:hover { background: #f1f3f4; color: var(--text-main); }
+        .address-bar-container { flex: 1; position: relative; }
+        .address-bar { width: 100%; height: 34px; background: #f1f3f4; border: 1px solid transparent; border-radius: 20px; padding: 0 40px; color: var(--text-main); font-size: 0.9rem; -webkit-appearance: none; }
+        .address-bar:focus { background: #fff; border: 1px solid #dadce0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); outline: none; }
+        .bar-icon { position: absolute; top: 50%; transform: translateY(-50%); color: var(--text-dim); font-size: 0.85rem; }
+        .bar-icon.search { left: 16px; }
+        .bar-icon.reload { right: 16px; cursor: pointer; }
+
+        .viewport-container { flex: 1; position: relative; background: #fff; overflow: hidden; }
+        .tab-content { position: absolute; inset: 0; display: none; animation: fadeIn 0.3s; overflow: hidden; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        iframe { width: 100%; height: 100%; border: none; display: block; }
+
+        /* Start Page */
+        .start-page { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; overflow-y: auto; padding: 20px; }
+        .start-logo { font-size: 2.5rem; font-weight: 500; color: #5f6368; margin-bottom: 20px; user-select: none; -webkit-user-select: none; }
+        .mega-search { width: 100%; max-width: 500px; padding: 12px 20px; border-radius: 24px; border: 1px solid #dfe1e5; box-shadow: 0 1px 6px rgba(0,0,0,0.1); -webkit-appearance: none; }
+        .mega-search:focus { outline: none; border-color: var(--elixir-primary); }
+        .quick-links { margin-top: 30px; display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+        .q-link { text-decoration: none; color: var(--text-dim); display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 0.75rem; user-select: none; -webkit-user-select: none; }
+        .q-link i { width: 40px; height: 40px; border-radius: 50%; background: #f1f3f4; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; transition: background 0.2s; }
+        .q-link:hover i { background: #e8eaed; }
+        
+        /* Modal & UI Enhancement */
+        .modal { 
+            position: fixed; inset: 0; background: rgba(0,0,0,0.4); 
+            display: none; align-items: center; justify-content: center; z-index: 1000; 
+            backdrop-filter: blur(4px); animation: fadeIn 0.2s;
+        }
+        .modal-content { 
+            background: white; padding: 24px; border-radius: 16px; width: 340px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 12px;
+        }
+        .modal h3 { font-size: 1.1rem; color: var(--text-main); font-weight: 500; margin-bottom: 4px; }
+        .modal input, .modal select { 
+            width: 100%; padding: 10px 14px; border: 1px solid var(--chrome-border); 
+            border-radius: 8px; font-size: 0.9rem; background: #f8f9fa; transition: 0.2s; -webkit-appearance: none;
+        }
+        .modal select { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%235f6368' d='M0 0l5 5 5-5z'/></svg>"); background-repeat: no-repeat; background-position: right 14px center; background-size: 10px; }
+        .modal input:focus, .modal select:focus { outline: none; border-color: var(--elixir-primary); background: #fff; }
+        .modal-buttons { display: flex; gap: 8px; margin-top: 8px; }
+        .modal button { 
+            flex: 1; padding: 10px; border-radius: 8px; border: none; font-size: 0.9rem; cursor: pointer; font-weight: 500; transition: 0.2s;
+        }
+        .modal button.btn-primary { background: var(--elixir-primary); color: white; }
+        .modal button.btn-primary:hover { background: #3367d6; }
+        .modal button.btn-secondary { background: #f1f3f4; color: var(--text-main); }
+        .modal button.btn-secondary:hover { background: #e8eaed; }
+        .modal button.btn-danger { background: #ea4335; color: white; }
+        .modal button.btn-danger:hover { background: #d93025; }
+        
+        .frame-loader { position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: #4285f4; display: none; }
+        .frame-loader.active { display: block; }
+
+        /* --- Floating Panic Button --- */
+        #panic-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 26px;
+            height: 26px;
+            background-color: #000000;
+            color: #ffffff;
+            border: none;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            cursor: move;
+            z-index: 10000;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        #panic-button:active {
+            background-color: #222222;
+        }
+    </style>
+    <script src="uv/uv.bundle.js"></script>
+    <script src="uv/uv.config.js"></script>
+</head>
+<body>
+
+    <div id="boot-loader">
+        <div class="pulse-ring"></div>
+        <div class="boot-icon"><i class="fa-brands fa-chrome"></i></div>
+        <div class="boot-progress-container"><div class="boot-progress-bar" id="boot-bar"></div></div>
+    </div>
+
+    <div class="app-container">
+        <header class="browser-header">
+            <div class="tab-bar" id="tab-bar">
+                <button class="new-tab-btn" onclick="addNewTab()"><i class="fa-solid fa-plus"></i></button>
+            </div>
+        </header>
+
+        <nav class="nav-bar">
+            <div class="nav-controls">
+                <button class="nav-btn" onclick="goBack()"><i class="fa-solid fa-arrow-left"></i></button>
+                <button class="nav-btn" onclick="goForward()"><i class="fa-solid fa-arrow-right"></i></button>
+            </div>
+            <div class="address-bar-container">
+                <i class="fa-solid fa-magnifying-glass bar-icon search"></i>
+                <input type="text" class="address-bar" id="main-address-bar" placeholder="検索またはURLを入力" autocomplete="off">
+                <i class="fa-solid fa-rotate-right bar-icon reload" onclick="reloadFrame()"></i>
+            </div>
+        </nav>
+
+        <div class="viewport-container" id="viewport-container">
+            <div class="frame-loader" id="global-loader"></div>
+        </div>
+    </div>
+
+    <div id="fav-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="modal-title">お気に入り追加</h3>
+            <input type="hidden" id="fav-edit-idx" value="-1">
+            <input type="text" id="fav-name" placeholder="名前">
+            <input type="text" id="fav-url" placeholder="URL (例: google.com)">
+            <select id="fav-icon">
+                <option value="globe">標準 (地球儀)</option>
+                <option value="google">Google</option>
+                <option value="youtube">YouTube</option>
+                <option value="github">GitHub</option>
+                <option value="twitter">Twitter / X</option>
+                <option value="star">スター</option>
+                <option value="magnifying-glass">検索</option>
+                <option value="gamepad">ゲーム</option>
+            </select>
+            <div class="modal-buttons">
+                <button class="btn-primary" onclick="saveFav()">保存</button>
+                <button class="btn-secondary" onclick="document.getElementById('fav-modal').style.display='none'">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="action-modal" class="modal" onclick="this.style.display='none'">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h3>お気に入りの操作</h3>
+            <div class="modal-buttons" style="flex-direction: column;">
+                <button class="btn-secondary" onclick="openEditFav()">編集する</button>
+                <button class="btn-danger" onclick="deleteFav()">削除する</button>
+                <button class="btn-secondary" onclick="document.getElementById('action-modal').style.display='none'">キャンセル</button>
+            </div>
+        </div>
+    </div>
+
+    <button id="panic-button"><i class="fa-solid fa-exclamation"></i></button>
+
+    <script type="module">
+        import { registerSW } from "/prxy/register-sw.mjs";
+        import * as BareMux from "/prxy/baremux/index.mjs";
+
+        // グローバルにバインドして従来のインライン属性等から呼び出せるように定義
+        const connection = new BareMux.BareMuxConnection("/prxy/baremux/worker.js");
+
+        window.getProxyUrl = async function(input) {
+            let url = input.trim();
+            if (!url) return '';
+            const isUrl = /^(https?:\/\/)?([\w.-]+)\.([a-z]{2,})/.test(url) && !url.includes(' ');
+            if (!isUrl) {
+                url = `https://html.duckduckgo.com/html?q=${encodeURIComponent(url)}`;
+            } else {
+                if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+            }
+
+            try {
+                await registerSW();
+                const currentBare = "/bare/";
+                if ((await connection.getTransport()) !== "/prxy/baremux/worker.js") {
+                    await connection.setTransport("/prxy/baremux/worker.js", [{ bare: currentBare }]);
+                }
+                return __uv$config.prefix + __uv$config.encodeUrl(url);
+            } catch (e) {
+                console.error(e);
+                return '';
+            }
+        };
+    </script>
+
+    <script>
+        let tabs = [];
+        let activeTabId = null;
+        let tabCount = 0;
+        let favs = JSON.parse(localStorage.getItem('favs')) || [{name:'Google', url:'google.com', icon:'google'}, {name:'YouTube', url:'youtube.com', icon:'youtube'}];
+        
+        let pressTimer = null;
+        window.isLongPress = false;
+        let selectedFavIdx = null;
+
+        new Sortable(document.getElementById('tab-bar'), { animation: 150, filter: '.new-tab-btn' });
+
+        window.onload = () => {
+            const bar = document.getElementById('boot-bar');
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 30;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    setTimeout(() => document.getElementById('boot-loader').style.opacity = '0', 200);
+                    setTimeout(() => document.getElementById('boot-loader').remove(), 700);
+                }
+                bar.style.width = progress + '%';
+            }, 200);
+            addNewTab();
+            initPanicButton();
+        };
+
+        function addNewTab() {
+            const id = 'tab-' + (++tabCount);
+            tabs.push({ id: id, title: '新しいタブ', url: '', isStartPage: true });
+            const tabEl = document.createElement('div');
+            tabEl.className = 'tab';
+            tabEl.id = 'handle-' + id;
+            tabEl.onclick = () => switchTab(id);
+            tabEl.innerHTML = `<span class="tab-title" id="title-${id}">新しいタブ</span><i class="fa-solid fa-xmark tab-close" onclick="event.stopPropagation(); closeTab('${id}')"></i>`;
+            document.getElementById('tab-bar').insertBefore(tabEl, document.querySelector('.new-tab-btn'));
+            const contentEl = document.createElement('div');
+            contentEl.className = 'tab-content';
+            contentEl.id = 'content-' + id;
+            contentEl.innerHTML = createStartPageHTML(id);
+            document.getElementById('viewport-container').appendChild(contentEl);
+            switchTab(id);
+        }
+
+        function createStartPageHTML(tabId) {
+            let html = `<div class="start-page"><div class="start-logo">sasuty proxy</div><input type="text" class="mega-search" placeholder="Google で検索または URL を入力" onkeypress="if(event.key === 'Enter') navigate('${tabId}', this.value)"><div class="quick-links" id="link-container-${tabId}">`;
+            
+            favs.forEach((f, idx) => {
+                const isBrand = ['google', 'youtube', 'github', 'twitter'].includes(f.icon);
+                const iconClass = isBrand ? 'fa-brands' : 'fa-solid';
+                html += `<a href="#" class="q-link" onclick="if(window.isLongPress) return false; navigate('${tabId}', '${f.url}')" onmousedown="handlePressStart(event, ${idx})" onmouseup="handlePressEnd()" onmouseleave="handlePressEnd()" ontouchstart="handlePressStart(event, ${idx})" ontouchend="handlePressEnd()"><i class="${iconClass} fa-${f.icon}"></i><span>${f.name}</span></a>`;
+            });
+            
+            html += `<a href="#" class="q-link" onclick="showAddModal()"><i class="fa-solid fa-plus"></i><span>追加</span></a></div></div>`;
+            return html;
+        }
+
+        function showAddModal() {
+            document.getElementById('modal-title').innerText = 'お気に入り追加';
+            document.getElementById('fav-edit-idx').value = '-1';
+            document.getElementById('fav-name').value = '';
+            document.getElementById('fav-url').value = '';
+            document.getElementById('fav-icon').value = 'globe';
+            document.getElementById('fav-modal').style.display = 'flex';
+        }
+
+        function handlePressStart(e, idx) {
+            window.isLongPress = false;
+            selectedFavIdx = idx;
+            pressTimer = setTimeout(() => {
+                window.isLongPress = true;
+                document.getElementById('action-modal').style.display = 'flex';
+            }, 600);
+        }
+
+        function handlePressEnd() {
+            clearTimeout(pressTimer);
+            setTimeout(() => { window.isLongPress = false; }, 50);
+        }
+
+        function openEditFav() {
+            document.getElementById('action-modal').style.display = 'none';
+            const f = favs[selectedFavIdx];
+            document.getElementById('modal-title').innerText = 'お気に入り編集';
+            document.getElementById('fav-edit-idx').value = selectedFavIdx;
+            document.getElementById('fav-name').value = f.name;
+            document.getElementById('fav-url').value = f.url;
+            document.getElementById('fav-icon').value = f.icon || 'globe';
+            document.getElementById('fav-modal').style.display = 'flex';
+        }
+
+        function deleteFav() {
+            document.getElementById('action-modal').style.display = 'none';
+            favs.splice(selectedFavIdx, 1);
+            localStorage.setItem('favs', JSON.stringify(favs));
+            updateAllStartPagesDOM();
+        }
+
+        function saveFav() {
+            const name = document.getElementById('fav-name').value;
+            const url = document.getElementById('fav-url').value;
+            const icon = document.getElementById('fav-icon').value;
+            const editIdx = parseInt(document.getElementById('fav-edit-idx').value);
+            
+            if(name && url) {
+                if(editIdx === -1) {
+                    favs.push({name, url, icon});
+                } else {
+                    favs[editIdx] = {name, url, icon};
+                }
+                localStorage.setItem('favs', JSON.stringify(favs));
+                document.getElementById('fav-modal').style.display = 'none';
+                updateAllStartPagesDOM();
+            }
+        }
+
+        function updateAllStartPagesDOM() {
+            tabs.forEach(tab => {
+                const container = document.getElementById(`link-container-${tab.id}`);
+                if (container) {
+                    let html = '';
+                    favs.forEach((f, idx) => {
+                        const isBrand = ['google', 'youtube', 'github', 'twitter'].includes(f.icon);
+                        const iconClass = isBrand ? 'fa-brands' : 'fa-solid';
+                        html += `<a href="#" class="q-link" onclick="if(window.isLongPress) return false; navigate('${tab.id}', '${f.url}')" onmousedown="handlePressStart(event, ${idx})" onmouseup="handlePressEnd()" onmouseleave="handlePressEnd()" ontouchstart="handlePressStart(event, ${idx})" ontouchend="handlePressEnd()"><i class="${iconClass} fa-${f.icon}"></i><span>${f.name}</span></a>`;
+                    });
+                    html += `<a href="#" class="q-link" onclick="showAddModal()"><i class="fa-solid fa-plus"></i><span>追加</span></a>`;
+                    container.innerHTML = html;
+                }
+            });
+        }
+
+        function switchTab(id) {
+            activeTabId = id;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById('handle-' + id).classList.add('active');
+            document.getElementById('content-' + id).classList.add('active');
+            const tab = tabs.find(t => t.id === id);
+            document.getElementById('main-address-bar').value = tab.isStartPage ? '' : tab.url;
+        }
+
+        function closeTab(id) {
+            if (tabs.length === 1) return;
+            const index = tabs.findIndex(t => t.id === id);
+            tabs.splice(index, 1);
+            document.getElementById('handle-' + id).remove();
+            document.getElementById('content-' + id).remove();
+            if (activeTabId === id) switchTab(tabs[tabs.length - 1].id);
+        }
+
+        async function navigate(tabId, input) {
+            const tab = tabs.find(t => t.id === tabId);
+            const content = document.getElementById('content-' + tabId);
+            tab.url = input; tab.isStartPage = false;
+            document.getElementById('global-loader').classList.add('active');
+            document.getElementById('title-' + tabId).innerText = input.split('/')[0];
+            
+            // 非同期で生成されるプロキシURLの完了を待機して展開
+            const proxyUrl = await window.getProxyUrl(input);
+            content.innerHTML = `<iframe src="${proxyUrl}" id="frame-${tabId}" onload="hideLoader()"></iframe>`;
+            if (activeTabId === tabId) document.getElementById('main-address-bar').value = input;
+        }
+
+        function hideLoader() { document.getElementById('global-loader').classList.remove('active'); }
+        document.getElementById('main-address-bar').addEventListener('keypress', (e) => { if (e.key === 'Enter') navigate(activeTabId, e.target.value); });
+        function reloadFrame() { const f = document.getElementById('frame-' + activeTabId); if (f) f.src = f.src; }
+        function goBack() { const f = document.getElementById('frame-' + activeTabId); if (f) try { f.contentWindow.history.back(); } catch(e) {} }
+        function goForward() { const f = document.getElementById('frame-' + activeTabId); if (f) try { f.contentWindow.history.forward(); } catch(e) {} }
+
+        /* --- Panic Button Logic (Drag & Click) --- */
+        function initPanicButton() {
+            const btn = document.getElementById('panic-button');
+            let isDragging = false;
+            let dragStarted = false;
+            let startX, startY, initialX, initialY;
+
+            function startDrag(e) {
+                isDragging = false;
+                dragStarted = true;
+                
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                
+                startX = clientX;
+                startY = clientY;
+                
+                const rect = btn.getBoundingClientRect();
+                initialX = rect.left;
+                initialY = rect.top;
+            }
+
+            function doDrag(e) {
+                if (!dragStarted) return;
+                
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                
+                const dx = clientX - startX;
+                const dy = clientY - startY;
+
+                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                    isDragging = true;
+                }
+
+                if (isDragging) {
+                    if (e.cancelable) e.preventDefault();
+
+                    let newX = initialX + dx;
+                    let newY = initialY + dy;
+
+                    newX = Math.max(0, Math.min(window.innerWidth - btn.offsetWidth, newX));
+                    newY = Math.max(0, Math.min(window.innerHeight - btn.offsetHeight, newY));
+
+                    btn.style.left = newX + 'px';
+                    btn.style.top = newY + 'px';
+                    btn.style.bottom = 'auto';
+                    btn.style.right = 'auto';
+                }
+            }
+
+            function endDrag(e) {
+                if (!dragStarted) return;
+                dragStarted = false;
+                if (!isDragging) {
+                    window.location.href = 'https://loilonote.app/';
+                }
+            }
+
+            btn.addEventListener('mousedown', startDrag);
+            document.addEventListener('mousemove', doDrag);
+            document.addEventListener('mouseup', endDrag);
+
+            btn.addEventListener('touchstart', startDrag, { passive: true });
+            document.addEventListener('touchmove', doDrag, { passive: false });
+            document.addEventListener('touchend', endDrag);
+        }
+    </script>
+</body>
+</html>
