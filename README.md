@@ -1,0 +1,1 @@
+# sasuty-proxy-by-sennin-webservice-edition
