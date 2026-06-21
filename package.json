@@ -8,6 +8,9 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@mercuryworkshop/bare-mux": "^2.1.9",
+    "@mercuryworkshop/epoxy-transport": "^3.0.1",
+    "@titaniumnetwork-dev/ultraviolet": "^3.2.10",
     "@tomphttp/bare-server-node": "^2.0.1",
     "cors": "^2.8.5",
     "express": "^4.19.2"
